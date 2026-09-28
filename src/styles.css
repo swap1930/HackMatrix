@@ -1,0 +1,210 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * RapidRoute design system.
+ * All colors are semantic tokens (oklch). Never hardcode colors in components.
+ * Light / dark values below; `.hc` adds a high-contrast variant for sunlight use.
+ */
+
+@theme inline {
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--surface-raised);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--danger-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--primary);
+  --color-chart-2: var(--info);
+  --color-chart-3: var(--success);
+  --color-chart-4: var(--warning);
+  --color-chart-5: var(--danger);
+  --shadow-card: var(--shadow-elevation);
+}
+
+:root {
+  --radius: 0.875rem;
+  --background: oklch(0.985 0.004 250);
+  --foreground: oklch(0.21 0.03 255);
+  --surface: oklch(1 0 0);
+  --surface-raised: oklch(0.995 0.002 250);
+  --text-muted: oklch(0.49 0.025 256);
+  --primary: oklch(0.55 0.18 256);
+  --primary-foreground: oklch(0.99 0.002 250);
+  --secondary: oklch(0.955 0.008 250);
+  --secondary-foreground: oklch(0.26 0.03 256);
+  --muted: oklch(0.96 0.006 250);
+  --accent: oklch(0.945 0.02 250);
+  --accent-foreground: oklch(0.24 0.03 256);
+  --success: oklch(0.52 0.13 155);
+  --success-foreground: oklch(0.99 0.002 250);
+  --warning: oklch(0.58 0.13 72);
+  --warning-foreground: oklch(0.99 0.002 250);
+  --danger: oklch(0.53 0.2 26);
+  --danger-foreground: oklch(0.99 0.002 250);
+  --info: oklch(0.52 0.12 232);
+  --info-foreground: oklch(0.99 0.002 250);
+  --border: oklch(0.9 0.01 252);
+  --input: oklch(0.9 0.01 252);
+  --ring: oklch(0.55 0.18 256);
+  --shadow-elevation: 0 1px 2px oklch(0.21 0.03 255 / 0.06), 0 8px 24px oklch(0.21 0.03 255 / 0.06);
+}
+
+.dark {
+  --background: oklch(0.19 0.022 258);
+  --foreground: oklch(0.96 0.005 250);
+  --surface: oklch(0.235 0.025 258);
+  --surface-raised: oklch(0.275 0.028 258);
+  --text-muted: oklch(0.74 0.02 254);
+  --primary: oklch(0.7 0.15 254);
+  --primary-foreground: oklch(0.17 0.02 258);
+  --secondary: oklch(0.3 0.026 258);
+  --secondary-foreground: oklch(0.95 0.005 250);
+  --muted: oklch(0.29 0.024 258);
+  --accent: oklch(0.32 0.03 258);
+  --accent-foreground: oklch(0.96 0.005 250);
+  --success: oklch(0.76 0.15 158);
+  --success-foreground: oklch(0.18 0.02 258);
+  --warning: oklch(0.81 0.14 78);
+  --warning-foreground: oklch(0.18 0.02 258);
+  --danger: oklch(0.7 0.17 22);
+  --danger-foreground: oklch(0.16 0.02 258);
+  --info: oklch(0.76 0.11 230);
+  --info-foreground: oklch(0.17 0.02 258);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.7 0.15 254);
+  --shadow-elevation: 0 1px 2px oklch(0 0 0 / 0.4), 0 10px 30px oklch(0 0 0 / 0.35);
+}
+
+/* High contrast (ambulance cabin / direct sunlight) */
+.hc {
+  --foreground: oklch(0.12 0.02 258);
+  --text-muted: oklch(0.3 0.02 258);
+  --border: oklch(0.45 0.03 258);
+  --primary: oklch(0.42 0.22 258);
+  --success: oklch(0.42 0.15 152);
+  --warning: oklch(0.48 0.16 68);
+  --danger: oklch(0.45 0.23 27);
+}
+
+.dark.hc {
+  --background: oklch(0.13 0.015 258);
+  --surface: oklch(0.17 0.02 258);
+  --foreground: oklch(1 0 0);
+  --text-muted: oklch(0.88 0.01 254);
+  --border: oklch(1 0 0 / 40%);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    transition:
+      background-color 200ms ease,
+      color 200ms ease;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .surface-card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-card);
+  }
+
+  .pulse-dot {
+    animation: rr-pulse 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes rr-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Leaflet theming */
+.leaflet-container {
+  background: var(--color-muted);
+  font-family: var(--font-sans);
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--color-surface-raised);
+  color: var(--color-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+}
