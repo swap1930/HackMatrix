@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, MapPin, Sparkles, Stethoscope } from "lucide-react";
@@ -74,6 +74,11 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 const statusLabel = (s: string) => s.replace(/_/g, " ");
+
+/** Random pick so repeated runs don't read identically. */
+function pick<T>(arr: readonly T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)] as T;
+}
 
 function Dispatch() {
   useLiveUpdates();
@@ -233,9 +238,14 @@ function Dispatch() {
       toast.error("Log the case first.");
       return;
     }
+    // One ambulance -> one hospital: block a second hold for the same case.
+    if (activeAssignment) {
+      toast.error("This ambulance is already assigned to a hospital — one case, one hospital.");
+      return;
+    }
     setBusy(`hold-${r.hospital.id}`);
     try {
-      const { error } = await supabase.rpc("reserve_hospital_resources", {
+      const { data: held, error } = await supabase.rpc("reserve_hospital_resources", {
         p_request_id: activeRequest.id,
         p_hospital_id: r.hospital.id,
         p_needs: {
@@ -247,13 +257,23 @@ function Dispatch() {
         p_idempotency_key: `${activeRequest.id}:${r.hospital.id}`,
       } as never);
       if (error) throw error;
+      // Auto-accept: the hospital confirms immediately on hold, so the
+      // request moves pending_confirmation -> accepted without manual triage.
+      const assignmentId = (held as unknown as { id?: string } | null)?.id;
+      if (assignmentId) {
+        const { error: acceptError } = await supabase.rpc("respond_to_assignment", {
+          p_assignment_id: assignmentId,
+          p_action: "accept",
+        } as never);
+        if (acceptError) throw acceptError;
+      }
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["assignments"] }),
         qc.invalidateQueries({ queryKey: ["availability"] }),
         qc.invalidateQueries({ queryKey: ["requests"] }),
         qc.invalidateQueries({ queryKey: ["timeline"] }),
       ]);
-      toast.success(`Bed held at ${r.hospital.name} — waiting 5 minutes for confirmation.`);
+      toast.success(`Bed confirmed at ${r.hospital.name} — hospital accepted, patient marked accepted.`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Could not hold the bed.";
       toast.error(
@@ -292,6 +312,103 @@ function Dispatch() {
       setBusy(null);
     }
   };
+
+  // Humanized auto-progress: accepted -> en_route -> arrived -> handed_over.
+  // Gaps mimic real ops — crew acknowledgement, ETA-based travel time,
+  // handover formalities — each with jitter so runs never look scripted.
+  const activeStatus = activeRequest?.status;
+  const activeReqId = activeRequest?.id;
+  const activeAssignId = activeAssignment?.id;
+  const assignedEtaMin =
+    ranked.find((x) => x.hospital.id === activeAssignment?.hospital_id)?.etaMinutes ?? 15;
+  const [pendingAuto, setPendingAuto] = useState<{ label: string; at: number } | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  // Ticking clock only while an auto step is pending (drives the countdown).
+  useEffect(() => {
+    if (!pendingAuto) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [pendingAuto]);
+
+  useEffect(() => {
+    if (!activeReqId) {
+      setPendingAuto(null);
+      return;
+    }
+    const jitter = (base: number, spread: number) =>
+      Math.max(5000, Math.round(base + (Math.random() * 2 - 1) * spread));
+    const etaNote = `ETA ~${Math.max(1, Math.round(assignedEtaMin))} min`;
+    const step =
+      activeStatus === "accepted"
+        ? {
+            status: "en_route",
+            label: "En route",
+            // Crew acknowledgement + loading the patient: ~14–30s.
+            delay: jitter(22000, 8000),
+            note: pick([
+              `Crew acknowledged, wheels rolling (${etaNote})`,
+              `Departing pickup with patient aboard (${etaNote})`,
+              `Crew confirmed departure, patient stable for transport (${etaNote})`,
+            ]),
+            toast: "Crew is on the way.",
+          }
+        : activeStatus === "en_route"
+          ? {
+              status: "arrived",
+              label: "Arrived",
+              // Travel scales with the ranked ETA (~4s per ETA minute,
+              // clamped 25s–2min) with ±20% jitter.
+              delay: jitter(
+                Math.min(120000, Math.max(25000, assignedEtaMin * 4000)),
+                Math.min(120000, Math.max(25000, assignedEtaMin * 4000)) * 0.2,
+              ),
+              note: pick([
+                "Ambulance at hospital bay, crew with patient",
+                "Arrived at receiving bay, handing over paperwork",
+                "On scene at hospital entrance with patient",
+              ]),
+              toast: "Ambulance reached the hospital.",
+            }
+          : activeStatus === "arrived"
+            ? {
+                status: "handed_over",
+                label: "Handed over",
+                // Bedside handover + briefing the receiving team: ~30–60s.
+                delay: jitter(45000, 15000),
+                note: pick([
+                  "Patient handed over, receiving team briefed",
+                  "Bedside handover done, documents signed",
+                  "Care transferred, crew debriefed the receiving team",
+                ]),
+                toast: "Handover complete — care transferred.",
+              }
+            : null;
+    if (!step) {
+      setPendingAuto(null);
+      return;
+    }
+    setPendingAuto({ label: step.label, at: Date.now() + step.delay });
+    const t = setTimeout(() => {
+      void (async () => {
+        await advance(step.status, step.note);
+        if (step.status === "handed_over" && activeAssignId) {
+          await supabase.rpc("release_assignment", {
+            p_assignment_id: activeAssignId,
+            p_new_status: "completed",
+            p_reason: "Patient handed over (auto)",
+          } as never);
+          await Promise.all([
+            qc.invalidateQueries({ queryKey: ["assignments"] }),
+            qc.invalidateQueries({ queryKey: ["availability"] }),
+          ]);
+        }
+        toast.success(`Status auto-updated: ${step.label} — ${step.toast}`);
+      })();
+    }, step.delay);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeReqId, activeStatus, activeAssignId, assignedEtaMin]);
 
   const makeBrief = async () => {
     if (!activeRequest || !activeAssignment) return;
@@ -593,12 +710,12 @@ function Dispatch() {
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Button
                       onClick={() => holdBed(r)}
-                      disabled={!activeRequest || !!held || busy === `hold-${r.hospital.id}`}
+                      disabled={!activeRequest || !!activeAssignment || busy === `hold-${r.hospital.id}`}
                     >
                       {busy === `hold-${r.hospital.id}` ? (
                         <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                       ) : null}
-                      {held ? `Bed ${held.status}` : "Hold this bed"}
+                      {held ? `Bed ${held.status}` : activeAssignment ? "Assigned — one case, one hospital" : "Hold this bed"}
                     </Button>
                     {hospital?.phone ? (
                       <Button variant="outline" asChild>
@@ -626,6 +743,19 @@ function Dispatch() {
               <p className="mt-2 text-sm text-muted-foreground">
                 {activeRequest.ambulance_id} · {activeRequest.chief_complaint}
               </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                One case stays with one hospital. Statuses advance on their own with realistic gaps
+                (crew acknowledgement → ETA-based travel → bedside handover) — buttons below are manual override.
+              </p>
+              {pendingAuto ? (
+                <p className="mt-1 text-xs font-medium text-primary">
+                  Next: {pendingAuto.label} in ~
+                  {Math.max(0, Math.ceil((pendingAuto.at - nowMs) / 1000))}s
+                  {activeStatus === "en_route"
+                    ? ` (based on ~${Math.max(1, Math.round(assignedEtaMin))} min ETA)`
+                    : ""}
+                </p>
+              ) : null}
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button
